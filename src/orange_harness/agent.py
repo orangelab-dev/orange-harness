@@ -25,6 +25,17 @@ def run_agent(client: OpenAI, model: str, history: list, on_event=None) -> str:
         # response.output 可能同时包含 reasoning、function_call 或最终 message。
         history.extend(response.output)
 
+        # 记录 API 实际返回的思考内容，方便调试和后续评测。
+        # 某些模型只返回 reasoning summary，因此在没有 content 时使用 summary。
+        for item in response.output:
+            if item.type != "reasoning":
+                continue
+
+            reasoning_parts = item.content or item.summary
+            reasoning_text = "\n".join(part.text for part in reasoning_parts)
+            if reasoning_text and on_event is not None:
+                on_event({"type": "reasoning", "content": reasoning_text})
+
         # 从本次输出中找出模型希望执行的所有工具调用。
         tool_calls = [item for item in response.output if item.type == "function_call"]
 
