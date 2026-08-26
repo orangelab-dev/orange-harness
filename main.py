@@ -12,7 +12,7 @@ def main():
         base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
     )
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    messages = [{"role": "system", "content": "你是一个简洁、可靠的助手。"}]
+    history = []
 
     while True:
         question = input("你：").strip()
@@ -21,16 +21,15 @@ def main():
         if not question:
             continue
 
-        messages.append({"role": "user", "content": question})
-        response = client.chat.completions.create(
+        history.append({"role": "user", "content": question})
+        response = client.responses.create(
             model=model,
-            messages=messages,
-            reasoning_effort="low",
-            extra_body={"thinking": {"type": "enabled"}},
+            instructions="你是一个简洁、可靠的助手。",
+            input=history,
+            reasoning={"effort": "low"},
         )
-        answer = response.choices[0].message
-        messages.append(answer)
-        print(f"Agent：{answer.content}\n")
+        history.extend(response.output)
+        print(f"Agent：{response.output_text}\n")
 
 
 if __name__ == "__main__":
