@@ -1,36 +1,30 @@
-from typing import Literal
+"""计算器工具：这里只写普通业务函数，注册细节交给 @tool。"""
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class CalculatorInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    a: float = Field(description="第一个数字")
-    operator: Literal["+", "-", "*", "/"] = Field(description="运算符")
-    b: float = Field(description="第二个数字")
+from .base import tool
 
 
-CALCULATOR_TOOL = {
-    "type": "function",
-    "name": "calculate",
-    "description": "计算两个数字的加、减、乘、除。",
-    "parameters": CalculatorInput.model_json_schema(),
-}
+# @tool 大致等价于：add = tool(add)。它会在本模块被导入时执行注册。
+@tool
+def add(a: float, b: float) -> float:
+    """计算两个数字之和。"""
+    return a + b
 
 
-def calculate(arguments: str) -> str:
-    data = CalculatorInput.model_validate_json(arguments)
+@tool
+def subtract(a: float, b: float) -> float:
+    """计算两个数字之差。"""
+    return a - b
 
-    if data.operator == "+":
-        result = data.a + data.b
-    elif data.operator == "-":
-        result = data.a - data.b
-    elif data.operator == "*":
-        result = data.a * data.b
-    elif data.b == 0:
-        return "计算失败：除数不能为 0"
-    else:
-        result = data.a / data.b
 
-    return str(result)
+@tool
+def multiply(a: float, b: float) -> float:
+    """计算两个数字之积。"""
+    return a * b
+
+
+@tool
+def divide(a: float, b: float) -> float:
+    """计算两个数字之商。"""
+    if b == 0:
+        raise ValueError("除数不能为 0")
+    return a / b
