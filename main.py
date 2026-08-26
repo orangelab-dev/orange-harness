@@ -3,6 +3,8 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from agent import run_agent
+
 
 def main():
     load_dotenv()
@@ -22,14 +24,8 @@ def main():
             continue
 
         history.append({"role": "user", "content": question})
-        response = client.responses.create(
-            model=model,
-            instructions="你是一个简洁、可靠的助手。",
-            input=history,
-            reasoning={"effort": "low"},
-        )
-        history.extend(response.output)
-        print(f"Agent：{response.output_text}\n")
+        answer = run_agent(client, model, history)
+        print(f"Agent：{answer}\n")
 
 
 if __name__ == "__main__":
