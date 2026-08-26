@@ -1,0 +1,8 @@
+[project]
+name = "myharness"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=3.3.1",
+    "python-dotenv>=1.2.3",
+]
