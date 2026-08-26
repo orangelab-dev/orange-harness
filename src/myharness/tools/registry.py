@@ -3,7 +3,7 @@
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar, cast, get_type_hints
+from typing import Any, TypeVar, get_type_hints
 
 from openai.types.responses import FunctionToolParam
 from pydantic import BaseModel, ConfigDict, create_model
@@ -70,14 +70,12 @@ def tool(func: F) -> F:
 
     # 将函数信息翻译成 DeepSeek 能看懂的 Tool Schema。
     # 函数名成为工具名，docstring 成为描述，Pydantic 模型生成参数 JSON Schema。
-    schema = cast(
-        FunctionToolParam,
-        {
-            "type": "function",
-            "name": func.__name__,
-            "description": inspect.getdoc(func) or "",
-            "parameters": input_model.model_json_schema(),
-        },
+    schema = FunctionToolParam(
+        type="function",
+        name=func.__name__,
+        description=inspect.getdoc(func) or "",
+        parameters=input_model.model_json_schema(),
+        strict=False,
     )
 
     # 装饰器最关键的一步：导入模块时，把工具放进全局注册表。
