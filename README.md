@@ -1,4 +1,4 @@
-# myHarness
+# orange-harness
 
 一个最小的 Python Agent：使用 DeepSeek Responses API，通过 ReAct 循环调用本地工具。
 
@@ -46,7 +46,7 @@ Agent 只调用 `get_tool_schemas()` 和 `execute_tool()`，不依赖具体工�
 ## 项目结构
 
 ```text
-src/myharness/
+src/orange_harness/
 ├── main.py              # 配置、客户端和命令行输入
 ├── agent.py             # Responses API 与 ReAct 循环
 └── tools/
@@ -62,7 +62,7 @@ cp .env.example .env
 # 编辑 .env，填入 DEEPSEEK_API_KEY
 
 uv sync
-uv run myharness
+uv run orange-harness
 ```
 
 输入 `exit` 或 `quit` 退出。

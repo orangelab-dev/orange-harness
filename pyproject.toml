@@ -1,5 +1,5 @@
 [project]
-name = "myharness"
+name = "orange-harness"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-myharness = "myharness.main:main"
+orange-harness = "orange_harness.main:main"
 
 [build-system]
 requires = ["hatchling"]
