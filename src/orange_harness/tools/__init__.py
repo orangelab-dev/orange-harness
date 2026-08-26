@@ -26,16 +26,13 @@ def _load_tools():
 _load_tools()
 
 # 保留现有工具的包级公开导入；工具注册本身已经由 _load_tools() 完成。
-from .calculator import add, divide, multiply, subtract
+from .calculator import calculate
 
 
 __all__ = [
     "TOOL_REGISTRY",
-    "add",
-    "divide",
+    "calculate",
     "execute_tool",
     "get_tool_schemas",
-    "multiply",
-    "subtract",
     "tool",
 ]

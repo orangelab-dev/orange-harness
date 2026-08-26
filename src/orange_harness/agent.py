@@ -45,7 +45,7 @@ def run_agent(client: OpenAI, model: str, history: list, on_event=None) -> str:
                 )
 
             try:
-                # Agent 不知道 add、divide 等具体实现，只走统一执行入口。
+                # Agent 不知道具体工具实现，只走统一执行入口。
                 result = execute_tool(call.name, call.arguments)
             except (ValueError, TypeError) as error:
                 # 工具失败也要作为观察结果交还模型，让它解释或尝试修正。

@@ -39,7 +39,7 @@ def tool(func: F) -> F:
         raise ValueError(f"工具名称重复：{func.__name__}")
 
     # inspect.signature() 会读取函数的参数名称、注解和默认值。
-    # 例如 add(a: float, b: float) 会被读出 a 和 b 两个参数。
+    # 例如 calculate(a: float, operator: str, b: float) 会被读出三个参数。
     signature = inspect.signature(func)
 
     # get_type_hints() 把可能是字符串的类型注解解析成真正的 Python 类型。
@@ -55,10 +55,11 @@ def tool(func: F) -> F:
         fields[name] = (annotation, default)
 
     # 根据刚才读到的 fields，在运行时创建 Pydantic 模型。
-    # 对 add(a: float, b: float) 来说，它大致等价于手写：
+    # 对 calculate(a: float, operator: str, b: float) 来说，它大致等价于手写：
     #
-    # class AddInput(BaseModel):
+    # class CalculateInput(BaseModel):
     #     a: float
+    #     operator: str
     #     b: float
     #
     # extra="forbid" 表示拒绝函数没有声明的额外参数。
@@ -81,7 +82,7 @@ def tool(func: F) -> F:
     # 装饰器最关键的一步：导入模块时，把工具放进全局注册表。
     TOOL_REGISTRY[func.__name__] = Tool(func, input_model, schema)
 
-    # 返回原函数，所以 add(1, 2) 仍然可以像普通 Python 函数一样调用。
+    # 返回原函数，所以 calculate(1, "+", 2) 仍可像普通函数一样调用。
     return func
 
 

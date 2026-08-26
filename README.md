@@ -27,10 +27,13 @@ DeepSeek API 不保存会话，因此 `agent.py` 会在本地维护完整的 `hi
 工具只是加了 `@tool` 的普通函数：
 
 ```python
+from typing import Literal
+
+
 @tool
-def add(a: float, b: float) -> float:
-    """计算两个数字之和。"""
-    return a + b
+def calculate(a: float, operator: Literal["+", "-", "*", "/"], b: float) -> float:
+    """计算两个数字的加、减、乘、除。"""
+    ...
 ```
 
 `@tool` 自动完成：
