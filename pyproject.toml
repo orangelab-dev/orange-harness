@@ -7,3 +7,10 @@ dependencies = [
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.3",
 ]
+
+[project.scripts]
+myharness = "myharness.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

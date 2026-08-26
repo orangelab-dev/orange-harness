@@ -1,6 +1,6 @@
 """计算器工具：这里只写普通业务函数，注册细节交给 @tool。"""
 
-from .base import tool
+from .registry import tool
 
 
 # @tool 大致等价于：add = tool(add)。它会在本模块被导入时执行注册。

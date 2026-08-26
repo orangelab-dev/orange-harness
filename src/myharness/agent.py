@@ -3,7 +3,7 @@
 from openai import OpenAI
 from openai.types.shared_params import Reasoning
 
-from tools import execute_tool, get_tool_schemas
+from .tools import execute_tool, get_tool_schemas
 
 
 def run_agent(client: OpenAI, model: str, history: list) -> str:

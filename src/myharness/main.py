@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from agent import run_agent
+from .agent import run_agent
 
 
 def main():

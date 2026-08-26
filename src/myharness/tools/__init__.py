@@ -1,6 +1,6 @@
 """工具包的公共入口，以及需要注册的工具模块清单。"""
 
-from .base import TOOL_REGISTRY, execute_tool, get_tool_schemas, tool
+from .registry import TOOL_REGISTRY, execute_tool, get_tool_schemas, tool
 
 # 这里的导入不只是为了使用函数。
 # Python 导入 calculator.py 时会执行其中的 @tool 装饰器，从而注册四个工具。
