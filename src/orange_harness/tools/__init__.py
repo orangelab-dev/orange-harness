@@ -27,6 +27,7 @@ _load_tools()
 
 # 保留现有工具的包级公开导入；工具注册本身已经由 _load_tools() 完成。
 from .calculator import calculate
+from .shell import shell
 
 
 __all__ = [
@@ -34,5 +35,6 @@ __all__ = [
     "calculate",
     "execute_tool",
     "get_tool_schemas",
+    "shell",
     "tool",
 ]

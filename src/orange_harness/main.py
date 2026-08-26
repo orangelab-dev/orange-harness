@@ -4,31 +4,50 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from .agent import run_agent
-from .logger import configure_logger, logger
+from .logger import configure_logger, log_raw_event
 
 
-def log_event(event: dict):
-    """把 Agent event 转换为简洁日志。"""
+def _read_text(parts: list[dict]) -> str:
+    """从 Responses API 的内容数组中取出可展示文字。"""
+
+    return "\n".join(str(part["text"]) for part in parts if part.get("text"))
+
+
+def print_readable_event(event: dict) -> None:
+    """从原始 event 中提取适合人阅读的关键信息。"""
 
     event_type = event.get("type", "unknown_event")
+    data = event.get("data", {})
 
-    if event_type == "tool_call":
-        message = f"{event.get('name')} {event.get('arguments')}"
+    if event_type == "model_response":
+        # 文件保留完整 response；这里只遍历 output 展示关键内容。
+        for item in data.get("output", []):
+            item_type = item.get("type")
+
+            if item_type == "reasoning":
+                text = _read_text(item.get("content") or item.get("summary") or [])
+                if text:
+                    print(f"[reasoning] {text}")
+            elif item_type == "function_call":
+                print(f"[tool_call] {item.get('name')} {item.get('arguments')}")
+            elif item_type == "message":
+                text = _read_text(item.get("content") or [])
+                if text:
+                    print(f"[answer] {text}")
+
     elif event_type == "tool_result":
-        message = f"{event.get('name')} -> {event.get('result')}"
-    elif event_type == "reasoning":
-        message = str(event.get("content"))
-    elif event_type == "final_answer":
-        message = str(event.get("answer"))
+        print(f"[tool_result] {data.get('name')} -> {data.get('result')}")
+    elif event_type == "error":
+        print(f"[error] {data.get('stage')}: {data.get('message')}")
     else:
-        # 未知事件保留完整内容，便于以后扩展事件类型。
-        message = str(event)
+        print(f"[{event_type}] {data}")
 
-    logger.info(
-        "%s",
-        message,
-        extra={"event_type": event_type},
-    )
+
+def handle_event(event: dict) -> None:
+    """同一个 callback：完整写入文件，同时精简展示到终端。"""
+
+    log_raw_event(event)
+    print_readable_event(event)
 
 
 def main():
@@ -50,7 +69,7 @@ def main():
             continue
 
         history.append({"role": "user", "content": question})
-        run_agent(client, model, history, on_event=log_event)
+        run_agent(client, model, history, on_event=handle_event)
         print()
 
 

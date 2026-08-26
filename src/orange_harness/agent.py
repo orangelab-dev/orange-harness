@@ -11,59 +11,80 @@ def run_agent(client: OpenAI, model: str, history: list, on_event=None) -> str:
 
     # 一次用户提问可能需要调用多个工具，所以这里是循环而不是只请求一次。
     while True:
-        response = client.responses.create(
-            model=model,
-            instructions="你是一个简洁、可靠的助手。需要时使用提供的工具。",
-            input=history,
+        try:
+            response = client.responses.create(
+                model=model,
+                instructions="你是一个简洁、可靠的助手。需要时使用提供的工具。",
+                input=history,
 
-            # 这里只把工具“说明书”交给模型；模型不会直接执行 Python 函数。
-            tools=get_tool_schemas(),
-            reasoning=Reasoning(effort="low"),
-        )
+                # 这里只把工具“说明书”交给模型；模型不会直接执行 Python 函数。
+                tools=get_tool_schemas(),
+                reasoning=Reasoning(effort="low"),
+            )
+        except Exception as error:
+            if on_event is not None:
+                on_event(
+                    {
+                        "type": "error",
+                        "data": {
+                            "stage": "model_request",
+                            "error_type": type(error).__name__,
+                            "message": str(error),
+                        },
+                    }
+                )
+            raise
+
+        # 原始响应完整交给观察层，由观察层决定如何记录和展示。
+        if on_event is not None:
+            on_event({"type": "model_response", "data": response.model_dump()})
 
         # DeepSeek API 是无状态的。把本次输出保存下来，下次请求时要完整传回。
         # response.output 可能同时包含 reasoning、function_call 或最终 message。
         history.extend(response.output)
-
-        # 记录 API 实际返回的思考内容，方便调试和后续评测。
-        # 某些模型只返回 reasoning summary，因此在没有 content 时使用 summary。
-        for item in response.output:
-            if item.type != "reasoning":
-                continue
-
-            reasoning_parts = item.content or item.summary
-            reasoning_text = "\n".join(part.text for part in reasoning_parts)
-            if reasoning_text and on_event is not None:
-                on_event({"type": "reasoning", "content": reasoning_text})
 
         # 从本次输出中找出模型希望执行的所有工具调用。
         tool_calls = [item for item in response.output if item.type == "function_call"]
 
         # 没有 function_call，表示模型已经给出最终答案，Agent Loop 结束。
         if not tool_calls:
-            if on_event is not None:
-                on_event({"type": "final_answer", "answer": response.output_text})
             return response.output_text
 
         for call in tool_calls:
-            if on_event is not None:
-                on_event(
-                    {
-                        "type": "tool_call",
-                        "name": call.name,
-                        "arguments": call.arguments,
-                    }
-                )
-
             try:
                 # Agent 不知道具体工具实现，只走统一执行入口。
                 result = execute_tool(call.name, call.arguments)
-            except (ValueError, TypeError) as error:
+            except Exception as error:
+                if on_event is not None:
+                    on_event(
+                        {
+                            "type": "error",
+                            "data": {
+                                "stage": "tool_execution",
+                                "call_id": call.call_id,
+                                "name": call.name,
+                                "arguments": call.arguments,
+                                "error_type": type(error).__name__,
+                                "message": str(error),
+                            },
+                        }
+                    )
+
                 # 工具失败也要作为观察结果交还模型，让它解释或尝试修正。
                 result = f"工具执行失败：{error}"
 
             if on_event is not None:
-                on_event({"type": "tool_result", "name": call.name, "result": result})
+                on_event(
+                    {
+                        "type": "tool_result",
+                        "data": {
+                            "call_id": call.call_id,
+                            "name": call.name,
+                            "arguments": call.arguments,
+                            "result": result,
+                        },
+                    }
+                )
 
             # call_id 像订单号，用来告诉模型这个结果属于哪次 function_call。
             history.append(
