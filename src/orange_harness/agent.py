@@ -6,7 +6,7 @@ from openai.types.shared_params import Reasoning
 from .tools import execute_tool, get_tool_schemas
 
 
-def run_agent(client: OpenAI, model: str, history: list) -> str:
+def run_agent(client: OpenAI, model: str, history: list, on_event=None) -> str:
     """持续调用模型和工具，直到模型返回最终文字答案。"""
 
     # 一次用户提问可能需要调用多个工具，所以这里是循环而不是只请求一次。
@@ -30,15 +30,29 @@ def run_agent(client: OpenAI, model: str, history: list) -> str:
 
         # 没有 function_call，表示模型已经给出最终答案，Agent Loop 结束。
         if not tool_calls:
+            if on_event is not None:
+                on_event({"type": "final_answer", "answer": response.output_text})
             return response.output_text
 
         for call in tool_calls:
+            if on_event is not None:
+                on_event(
+                    {
+                        "type": "tool_call",
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    }
+                )
+
             try:
                 # Agent 不知道 add、divide 等具体实现，只走统一执行入口。
                 result = execute_tool(call.name, call.arguments)
             except (ValueError, TypeError) as error:
                 # 工具失败也要作为观察结果交还模型，让它解释或尝试修正。
                 result = f"工具执行失败：{error}"
+
+            if on_event is not None:
+                on_event({"type": "tool_result", "name": call.name, "result": result})
 
             # call_id 像订单号，用来告诉模型这个结果属于哪次 function_call。
             history.append(
