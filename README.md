@@ -41,6 +41,7 @@ def add(a: float, b: float) -> float:
 4. 将函数、输入模型和 Schema 存入 `TOOL_REGISTRY`。
 
 Agent 只调用 `get_tool_schemas()` 和 `execute_tool()`，不依赖具体工具。
+`tools/__init__.py` 会递归导入工具目录中的模块，因此新增工具后不需要维护导入清单。
 
 ## 项目结构
 
@@ -49,7 +50,7 @@ src/myharness/
 ├── main.py              # 配置、客户端和命令行输入
 ├── agent.py             # Responses API 与 ReAct 循环
 └── tools/
-    ├── __init__.py      # 显式导入并注册工具
+    ├── __init__.py      # 递归导入工具模块，触发注册
     ├── registry.py      # @tool、注册表和统一执行入口
     └── calculator.py    # 加、减、乘、除工具
 ```
@@ -80,4 +81,4 @@ def power(a: float, b: float) -> float:
     return a**b
 ```
 
-然后在 `tools/__init__.py` 中显式导入该函数，使装饰器执行注册。无需修改 Agent Loop。
+保存文件即可。程序启动时会递归导入该模块并执行装饰器，无需修改 `tools/__init__.py` 或 Agent Loop。

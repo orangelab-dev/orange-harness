@@ -1,10 +1,31 @@
-"""工具包的公共入口，以及需要注册的工具模块清单。"""
+"""工具包的公共入口，并在导入时递归加载所有工具模块。"""
+
+from importlib import import_module
+from pkgutil import walk_packages
 
 from .registry import TOOL_REGISTRY, execute_tool, get_tool_schemas, tool
 
-# 这里的导入不只是为了使用函数。
-# Python 导入 calculator.py 时会执行其中的 @tool 装饰器，从而注册四个工具。
-# 以后新增 tools/weather.py 时，也需要在这里显式导入它；当前不做自动目录扫描。
+
+def _load_tools():
+    """递归导入 tools 包中的模块，触发其中的 @tool 装饰器。"""
+
+    prefix = f"{__name__}."
+
+    for module in walk_packages(__path__, prefix):
+        relative_name = module.name.removeprefix(prefix)
+
+        # registry.py 是框架本身；下划线开头的模块视为内部实现。
+        if relative_name == "registry":
+            continue
+        if any(part.startswith("_") for part in relative_name.split(".")):
+            continue
+
+        import_module(module.name)
+
+
+_load_tools()
+
+# 保留现有工具的包级公开导入；工具注册本身已经由 _load_tools() 完成。
 from .calculator import add, divide, multiply, subtract
 
 
