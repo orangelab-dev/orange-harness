@@ -2,6 +2,8 @@
 
 一个最小的 Python Agent：使用 DeepSeek Responses API，通过 ReAct 循环调用本地工具。
 
+第一次使用请阅读：[使用教程](使用教程.md)
+
 ## 运行机制
 
 ```text
@@ -65,12 +67,15 @@ src/orange_harness/
 
 ## 安装和运行
 
-先在项目目录准备环境变量：
+把 API 配置放到用户目录（只需配置一次）：
 
 ```bash
-cp .env.example .env
-# 编辑 .env，填入 DEEPSEEK_API_KEY
+mkdir -p ~/.config/orange-harness
+cp .env.example ~/.config/orange-harness/.env
+# 编辑 ~/.config/orange-harness/.env，填入 DEEPSEEK_API_KEY
 ```
+
+系统环境变量的优先级更高。用户配置不存在或无法读取时，程序会回退读取启动目录下的 `.env`。
 
 开发阶段推荐以 editable 模式安装一次：
 
@@ -84,7 +89,7 @@ uv tool install --editable .
 
 ```bash
 cd /path/to/your/workspace
-orange-harness
+orange-harness --approval policy
 ```
 
 启动命令所在的目录就是 Agent workspace，Shell Tool 会固定在这里执行，运行日志也会写入这里的 `logs/` 目录。
@@ -111,13 +116,21 @@ macOS 默认使用系统的 `sandbox-exec`：
 
 危险命令判断只覆盖少量明显变体，不是完整的 Shell Parser，也不把命令黑名单当作安全边界。判断不确定时会回到人工确认。
 
-Linux、Windows 和没有可用 macOS Sandbox 的环境默认拒绝 Shell 执行。只有明确接受宿主机直接执行命令的风险时，才能在 `.env` 中开启：
+Linux、Windows 和没有可用 macOS Sandbox 的环境默认拒绝 Shell 执行。只有明确接受宿主机直接执行命令的风险时，才使用：
 
-```dotenv
-ORANGE_HARNESS_UNSAFE=true
+```bash
+orange-harness --unsafe --approval policy
 ```
 
 `unsafe` 使用 `NoSandbox`，它只表示“没有系统级隔离”，不会伪装成沙箱。即使开启 `unsafe`，Tool 的审批规则仍然生效。
+
+审批有三种全局模式：
+
+- `deny`（默认）：Tool 返回 `ask` 时直接拒绝。
+- `policy`：Tool 返回 `ask` 时询问用户。
+- `auto`：Tool 返回 `ask` 时自动执行。
+
+Tool 明确返回 `deny` 时，三种模式都会拒绝；`auto` 也不能绕过。沙箱和审批可自由组合，完整命令见[使用教程](使用教程.md#5-选择运行模式)。
 
 ## 新增工具
 

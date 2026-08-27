@@ -58,6 +58,7 @@ class ApprovalTests(unittest.TestCase):
             '{"value": 2}',
             request_approval=lambda _name, _arguments: True,
             on_event=events.append,
+            approval_mode="policy",
         )
 
         self.assertEqual(result, 2)
@@ -75,6 +76,7 @@ class ApprovalTests(unittest.TestCase):
             '{"value": 3}',
             request_approval=lambda _name, _arguments: False,
             on_event=events.append,
+            approval_mode="policy",
         )
 
         self.assertEqual(result["status"], "user_denied")
@@ -87,12 +89,13 @@ class ApprovalTests(unittest.TestCase):
             "approval_ask_test",
             '{"value": 4}',
             on_event=events.append,
+            approval_mode="policy",
         )
 
         self.assertEqual(result["status"], "policy_denied")
         self.assertEqual(events[-1]["data"]["reason"], "missing_handler")
 
-    def test_policy_denial_does_not_request_user_approval(self):
+    def test_tool_denial_cannot_be_bypassed_by_auto_mode(self):
         events = []
 
         result = execute_tool(
@@ -102,10 +105,51 @@ class ApprovalTests(unittest.TestCase):
                 "策略拒绝不应该询问用户"
             ),
             on_event=events.append,
+            approval_mode="auto",
         )
 
         self.assertEqual(result["status"], "policy_denied")
         self.assertEqual(events[-1]["data"]["status"], "policy_denied")
+        self.assertEqual(events[-1]["data"]["reason"], "tool_policy_deny")
+
+    def test_default_mode_denies_ask_without_prompting(self):
+        events = []
+
+        result = execute_tool(
+            "approval_ask_test",
+            '{"value": 6}',
+            request_approval=lambda _name, _arguments: self.fail(
+                "deny 模式不应该询问用户"
+            ),
+            on_event=events.append,
+        )
+
+        self.assertEqual(result["status"], "policy_denied")
+        self.assertEqual(events[-1]["data"]["reason"], "approval_mode_deny")
+
+    def test_auto_mode_executes_ask_without_prompting(self):
+        events = []
+
+        result = execute_tool(
+            "approval_ask_test",
+            '{"value": 7}',
+            request_approval=lambda _name, _arguments: self.fail(
+                "auto 模式不应该询问用户"
+            ),
+            on_event=events.append,
+            approval_mode="auto",
+        )
+
+        self.assertEqual(result, 7)
+        self.assertEqual(events[-1]["data"]["source"], "auto_mode")
+
+    def test_invalid_approval_mode_raises(self):
+        with self.assertRaisesRegex(ValueError, "无效的审批模式"):
+            execute_tool(
+                "approval_allow_test",
+                '{"value": 8}',
+                approval_mode="invalid",  # type: ignore[arg-type]
+            )
 
     def test_invalid_approval_decision_raises(self):
         with self.assertRaisesRegex(ValueError, "无效的审批决定"):
@@ -124,6 +168,7 @@ class ApprovalTests(unittest.TestCase):
                 "approval_ask_test",
                 '{"value": "not-an-integer"}',
                 request_approval=approve,
+                approval_mode="policy",
             )
 
         self.assertFalse(called)

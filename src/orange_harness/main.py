@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,42 @@ from openai import OpenAI
 
 from .agent import run_agent
 from .logger import configure_logger, log_raw_event
+from .tools.shell import configure_shell
+
+
+CONFIG_FILE = Path.home() / ".config" / "orange-harness" / ".env"
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """读取运行模式；安全相关选项只允许从 CLI 明确传入。"""
+
+    parser = argparse.ArgumentParser(prog="orange-harness")
+    parser.add_argument(
+        "--approval",
+        choices=("deny", "policy", "auto"),
+        default="deny",
+        help="审批模式（默认：deny）",
+    )
+    parser.add_argument(
+        "--unsafe",
+        action="store_true",
+        help="不使用系统级沙箱，直接在宿主机执行 Shell",
+    )
+    return parser.parse_args(argv)
+
+
+def load_config(config_file: Path = CONFIG_FILE) -> None:
+    """优先读取用户配置；找不到时回退到当前 workspace 的 .env。"""
+
+    try:
+        if config_file.is_file():
+            load_dotenv(config_file, override=False)
+            return
+    except OSError:
+        # 用户配置无法访问时，也允许当前 workspace 提供配置。
+        pass
+
+    load_dotenv(Path.cwd() / ".env", override=False)
 
 
 def confirm_tool(name: str, arguments: dict) -> bool:
@@ -67,9 +104,11 @@ def handle_event(event: dict) -> None:
     print_readable_event(event)
 
 
-def main():
-    load_dotenv()
+def main(argv: list[str] | None = None):
+    args = parse_args(argv)
+    load_config()
     configure_logger()
+    configure_shell(unsafe=args.unsafe)
 
     client = OpenAI(
         api_key=os.environ["DEEPSEEK_API_KEY"],
@@ -92,6 +131,7 @@ def main():
             history,
             on_event=handle_event,
             request_approval=confirm_tool,
+            approval_mode=args.approval,
         )
         print()
 

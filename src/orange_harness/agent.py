@@ -14,6 +14,7 @@ def run_agent(
     history: list,
     on_event=None,
     request_approval=None,
+    approval_mode="deny",
 ) -> str:
     """持续调用模型和工具，直到模型返回最终文字答案。"""
 
@@ -66,6 +67,7 @@ def run_agent(
                     call.arguments,
                     request_approval=request_approval,
                     on_event=on_event,
+                    approval_mode=approval_mode,
                 )
             except Exception as error:
                 if on_event is not None:

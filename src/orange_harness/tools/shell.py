@@ -1,6 +1,5 @@
 """通过统一沙箱 Backend 执行命令的 Shell 工具。"""
 
-import os
 import shlex
 from pathlib import Path
 from typing import Any
@@ -16,9 +15,17 @@ from .registry import ApprovalDecision, tool
 
 # 启动程序时固定 workspace，模型不能通过工具参数修改它。
 _WORKSPACE = Path.cwd().resolve()
+_UNSAFE = False
 
 _SAFE_COMMANDS = {"ls", "pwd", "uname", "whoami"}
 _DANGEROUS_COMMANDS = {"halt", "mkfs", "poweroff", "reboot", "shutdown"}
+
+
+def configure_shell(*, unsafe: bool) -> None:
+    """保存 CLI 选择；模型不能通过 Tool 参数改变是否使用沙箱。"""
+
+    global _UNSAFE
+    _UNSAFE = unsafe
 
 
 def _split_command(command: str) -> list[str]:
@@ -128,10 +135,8 @@ def _shell_approval(arguments: dict[str, Any]) -> ApprovalDecision:
 def shell(command: str) -> ExecutionResult:
     """在当前 workspace 中通过所选 Sandbox Backend 执行命令。"""
 
-    unsafe = os.getenv("ORANGE_HARNESS_UNSAFE", "").lower() in {"1", "true", "yes"}
-
     try:
-        sandbox = create_sandbox(unsafe=unsafe)
+        sandbox = create_sandbox(unsafe=_UNSAFE)
     except SandboxUnavailableError as error:
         return execution_result("sandbox_unavailable", message=str(error))
 

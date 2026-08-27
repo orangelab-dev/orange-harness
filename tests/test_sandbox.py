@@ -82,6 +82,8 @@ class SandboxTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
 
     def test_shell_reports_unavailable_without_running_raw_command(self):
+        shell_module.configure_shell(unsafe=False)
+
         with patch.object(
             shell_module,
             "create_sandbox",
@@ -91,6 +93,27 @@ class SandboxTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "sandbox_unavailable")
         run.assert_not_called()
+
+    def test_shell_uses_no_sandbox_only_after_explicit_configuration(self):
+        shell_module.configure_shell(unsafe=True)
+
+        try:
+            with patch.object(
+                shell_module,
+                "create_sandbox",
+                return_value=NoSandbox(),
+            ) as factory, patch.object(
+                sandbox_module,
+                "_run",
+                return_value={"status": "success"},
+            ):
+                result = shell_module.shell("pwd")
+        finally:
+            # 避免模块级运行配置污染其他测试。
+            shell_module.configure_shell(unsafe=False)
+
+        self.assertEqual(result["status"], "success")
+        factory.assert_called_once_with(unsafe=True)
 
     def test_timeout_has_structured_status(self):
         timeout = subprocess.TimeoutExpired("command", 30, output=b"partial")

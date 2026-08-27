@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, create_model
 # 原函数的参数和返回值类型；它不参与运行时的工具调用。
 F = TypeVar("F", bound=Callable[..., Any])
 ApprovalDecision = Literal["allow", "ask", "deny"]
+ApprovalMode = Literal["deny", "policy", "auto"]
 ApprovalRule = ApprovalDecision | Callable[[dict[str, Any]], ApprovalDecision]
 ApprovalHandler = Callable[[str, dict[str, Any]], bool]
 EventHandler = Callable[[dict], None]
@@ -152,8 +153,12 @@ def execute_tool(
     arguments: str,
     request_approval: ApprovalHandler | None = None,
     on_event: EventHandler | None = None,
+    approval_mode: ApprovalMode = "deny",
 ) -> Any:
     """根据模型返回的工具名和 JSON 参数，验证并执行对应函数。"""
+
+    if approval_mode not in {"deny", "policy", "auto"}:
+        raise ValueError(f"无效的审批模式：{approval_mode}")
 
     # 第一步：用 call.name 从注册表找到工具。
     registered_tool = TOOL_REGISTRY.get(name)
@@ -176,21 +181,16 @@ def execute_tool(
                     "name": name,
                     "arguments": kwargs,
                     "status": "policy_denied",
+                    "reason": "tool_policy_deny",
                 },
             },
         )
         return _denied_result("policy_denied", "工具未执行：审批规则拒绝。")
 
     if decision == "ask":
-        _emit_event(
-            on_event,
-            {
-                "type": "approval_request",
-                "data": {"name": name, "arguments": kwargs},
-            },
-        )
-
-        if request_approval is None:
+        # deny 模式默认拒绝所有需要确认的调用；auto 只跳过人工确认，
+        # 不能越过上面的 Tool 明确 deny。
+        if approval_mode == "deny":
             _emit_event(
                 on_event,
                 {
@@ -199,30 +199,57 @@ def execute_tool(
                         "name": name,
                         "arguments": kwargs,
                         "status": "policy_denied",
-                        "reason": "missing_handler",
+                        "reason": "approval_mode_deny",
                     },
                 },
             )
-            return _denied_result(
-                "policy_denied",
-                "工具未执行：缺少人工审批处理器。",
-            )
+            return _denied_result("policy_denied", "工具未执行：当前审批模式默认拒绝。")
 
-        if not request_approval(name, kwargs):
+        if approval_mode == "auto":
+            approval_source = "auto_mode"
+        else:
             _emit_event(
                 on_event,
                 {
-                    "type": "approval_result",
-                    "data": {
-                        "name": name,
-                        "arguments": kwargs,
-                        "status": "user_denied",
-                    },
+                    "type": "approval_request",
+                    "data": {"name": name, "arguments": kwargs},
                 },
             )
-            return _denied_result("user_denied", "工具未执行：用户拒绝。")
 
-        approval_source = "user"
+            if request_approval is None:
+                _emit_event(
+                    on_event,
+                    {
+                        "type": "approval_result",
+                        "data": {
+                            "name": name,
+                            "arguments": kwargs,
+                            "status": "policy_denied",
+                            "reason": "missing_handler",
+                        },
+                    },
+                )
+                return _denied_result(
+                    "policy_denied",
+                    "工具未执行：缺少人工审批处理器。",
+                )
+
+            if not request_approval(name, kwargs):
+                _emit_event(
+                    on_event,
+                    {
+                        "type": "approval_result",
+                        "data": {
+                            "name": name,
+                            "arguments": kwargs,
+                            "status": "user_denied",
+                            "reason": "user_rejected",
+                        },
+                    },
+                )
+                return _denied_result("user_denied", "工具未执行：用户拒绝。")
+
+            approval_source = "user"
     else:
         approval_source = "policy"
 
