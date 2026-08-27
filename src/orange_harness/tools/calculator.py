@@ -6,7 +6,7 @@ from .registry import tool
 
 
 # @tool 大致等价于：calculate = tool(calculate)。模块被导入时会自动注册。
-@tool
+@tool(approval="allow")
 def calculate(a: float, operator: Literal["+", "-", "*", "/"], b: float) -> float:
     """计算两个数字的加、减、乘、除。"""
 

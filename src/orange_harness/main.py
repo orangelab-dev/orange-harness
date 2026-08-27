@@ -1,10 +1,23 @@
+import json
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from .agent import run_agent
 from .logger import configure_logger, log_raw_event
+
+
+def confirm_tool(name: str, arguments: dict) -> bool:
+    """在 CLI 中展示 Tool 调用信息并请求人工确认。"""
+
+    print("\n[approval]")
+    print(f"cwd: {Path.cwd().resolve()}")
+    print(f"tool: {name}")
+    print(f"arguments: {json.dumps(arguments, ensure_ascii=False, default=str)}")
+    answer = input("是否执行？[y/N]: ")
+    return answer.strip().lower() in {"y", "yes"}
 
 
 def _read_text(parts: list[dict]) -> str:
@@ -37,6 +50,10 @@ def print_readable_event(event: dict) -> None:
 
     elif event_type == "tool_result":
         print(f"[tool_result] {data.get('name')} -> {data.get('result')}")
+    elif event_type == "approval_request":
+        print(f"[approval_request] {data.get('name')} {data.get('arguments')}")
+    elif event_type == "approval_result":
+        print(f"[approval_result] {data.get('name')} -> {data.get('status')}")
     elif event_type == "error":
         print(f"[error] {data.get('stage')}: {data.get('message')}")
     else:
@@ -69,7 +86,13 @@ def main():
             continue
 
         history.append({"role": "user", "content": question})
-        run_agent(client, model, history, on_event=handle_event)
+        run_agent(
+            client,
+            model,
+            history,
+            on_event=handle_event,
+            request_approval=confirm_tool,
+        )
         print()
 
 

@@ -15,6 +15,8 @@ execute_tool() 从注册表找到工具
   ↓
 Pydantic 校验 JSON 参数
   ↓
+根据 Tool 的 approval 规则放行、询问或拒绝
+  ↓
 执行普通 Python 函数
   ↓
 function_call_output 写回对话历史，继续调用 DeepSeek
@@ -30,7 +32,7 @@ DeepSeek API 不保存会话，因此 `agent.py` 会在本地维护完整的 `hi
 from typing import Literal
 
 
-@tool
+@tool(approval="allow")
 def calculate(a: float, operator: Literal["+", "-", "*", "/"], b: float) -> float:
     """计算两个数字的加、减、乘、除。"""
     ...
@@ -41,7 +43,7 @@ def calculate(a: float, operator: Literal["+", "-", "*", "/"], b: float) -> floa
 1. 用 `inspect.signature()` 读取参数。
 2. 用 Pydantic 动态创建输入模型。
 3. 生成 Responses API 使用的 Tool Schema。
-4. 将函数、输入模型和 Schema 存入 `TOOL_REGISTRY`。
+4. 将函数、输入模型、Schema 和审批规则存入 `TOOL_REGISTRY`。
 
 Agent 只调用 `get_tool_schemas()` 和 `execute_tool()`，不依赖具体工具。
 `tools/__init__.py` 会递归导入工具目录中的模块，因此新增工具后不需要维护导入清单。
@@ -52,23 +54,70 @@ Agent 只调用 `get_tool_schemas()` 和 `execute_tool()`，不依赖具体工�
 src/orange_harness/
 ├── main.py              # 配置、客户端和命令行输入
 ├── agent.py             # Responses API 与 ReAct 循环
+├── logger.py            # 原始事件文件日志
+├── sandbox.py           # MacOSSandbox 和 NoSandbox
 └── tools/
     ├── __init__.py      # 递归导入工具模块，触发注册
     ├── registry.py      # @tool、注册表和统一执行入口
-    └── calculator.py    # 加、减、乘、除工具
+    ├── calculator.py    # 加、减、乘、除工具
+    └── shell.py         # Shell 能力和动态审批规则
 ```
 
-## 运行
+## 安装和运行
+
+先在项目目录准备环境变量：
 
 ```bash
 cp .env.example .env
 # 编辑 .env，填入 DEEPSEEK_API_KEY
+```
 
+开发阶段推荐以 editable 模式安装一次：
+
+```bash
+uv tool install --editable .
+```
+
+`--editable` 表示 CLI 仍然使用当前项目源码，修改代码后不需要重复安装。
+
+安装完成后，可以在任意目录直接启动：
+
+```bash
+cd /path/to/your/workspace
+orange-harness
+```
+
+启动命令所在的目录就是 Agent workspace，Shell Tool 会固定在这里执行，运行日志也会写入这里的 `logs/` 目录。
+
+如果只想在仓库内临时运行，不安装 CLI，也可以使用：
+
+```bash
 uv sync
 uv run orange-harness
 ```
 
 输入 `exit` 或 `quit` 退出。
+
+## Shell 安全边界
+
+macOS 默认使用系统的 `sandbox-exec`：
+
+- workspace 外禁止写入。
+- workspace 外仍然允许读取。
+- 网络默认不允许。
+- 沙箱不可用或启动失败时，不会自动降级成裸执行。
+
+当前没有实现敏感目录读取限制，也不能阻止命令删除 workspace 内的文件。沙箱限制和人工审批是两个独立机制：明确安全且只操作 workspace 的命令可以自动执行，无法确定的命令需要确认，明确危险的命令直接拒绝。
+
+危险命令判断只覆盖少量明显变体，不是完整的 Shell Parser，也不把命令黑名单当作安全边界。判断不确定时会回到人工确认。
+
+Linux、Windows 和没有可用 macOS Sandbox 的环境默认拒绝 Shell 执行。只有明确接受宿主机直接执行命令的风险时，才能在 `.env` 中开启：
+
+```dotenv
+ORANGE_HARNESS_UNSAFE=true
+```
+
+`unsafe` 使用 `NoSandbox`，它只表示“没有系统级隔离”，不会伪装成沙箱。即使开启 `unsafe`，Tool 的审批规则仍然生效。
 
 ## 新增工具
 
@@ -78,7 +127,7 @@ uv run orange-harness
 from .registry import tool
 
 
-@tool
+@tool(approval="allow")
 def power(a: float, b: float) -> float:
     """计算 a 的 b 次方。"""
     return a**b

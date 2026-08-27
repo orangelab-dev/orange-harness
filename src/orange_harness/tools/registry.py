@@ -3,7 +3,7 @@
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar, get_type_hints
+from typing import Any, Literal, TypeVar, get_type_hints, overload
 
 from openai.types.responses import FunctionToolParam
 from pydantic import BaseModel, ConfigDict, create_model
@@ -12,6 +12,10 @@ from pydantic import BaseModel, ConfigDict, create_model
 # F 表示“任意函数类型”。使用 TypeVar 是为了让 @tool 装饰后，IDE 仍然知道
 # 原函数的参数和返回值类型；它不参与运行时的工具调用。
 F = TypeVar("F", bound=Callable[..., Any])
+ApprovalDecision = Literal["allow", "ask", "deny"]
+ApprovalRule = ApprovalDecision | Callable[[dict[str, Any]], ApprovalDecision]
+ApprovalHandler = Callable[[str, dict[str, Any]], bool]
+EventHandler = Callable[[dict], None]
 
 
 @dataclass(frozen=True)
@@ -27,13 +31,39 @@ class Tool:
     # 发送给 Responses API 的工具说明书。
     schema: FunctionToolParam
 
+    # Tool 自己声明的审批规则，可以是固定决定，也可以根据参数动态判断。
+    approval: ApprovalRule
+
 
 # 全局工具注册表，可以把它理解成：工具名称 -> 工具资料。
 TOOL_REGISTRY: dict[str, Tool] = {}
 
 
-def tool(func: F) -> F:
-    """把一个带类型注解的普通函数转换并注册为 LLM Tool。"""
+@overload
+def tool(func: F, *, approval: ApprovalRule = "ask") -> F: ...
+
+
+@overload
+def tool(
+    func: None = None,
+    *,
+    approval: ApprovalRule = "ask",
+) -> Callable[[F], F]: ...
+
+
+def tool(
+    func: F | None = None,
+    *,
+    approval: ApprovalRule = "ask",
+) -> F | Callable[[F], F]:
+    """把普通函数注册为 LLM Tool，并保存它的审批规则。"""
+
+    # 同时支持 @tool 和 @tool(approval=...) 两种写法。
+    if func is None:
+        def decorator(decorated_func: F) -> F:
+            return tool(decorated_func, approval=approval)
+
+        return decorator
 
     if func.__name__ in TOOL_REGISTRY:
         raise ValueError(f"工具名称重复：{func.__name__}")
@@ -80,7 +110,7 @@ def tool(func: F) -> F:
     )
 
     # 装饰器最关键的一步：导入模块时，把工具放进全局注册表。
-    TOOL_REGISTRY[func.__name__] = Tool(func, input_model, schema)
+    TOOL_REGISTRY[func.__name__] = Tool(func, input_model, schema, approval)
 
     # 返回原函数，所以 calculate(1, "+", 2) 仍可像普通函数一样调用。
     return func
@@ -92,7 +122,37 @@ def get_tool_schemas() -> list[FunctionToolParam]:
     return [registered_tool.schema for registered_tool in TOOL_REGISTRY.values()]
 
 
-def execute_tool(name: str, arguments: str) -> Any:
+def _resolve_approval(
+    approval: ApprovalRule,
+    arguments: dict[str, Any],
+) -> ApprovalDecision:
+    """把静态或动态审批规则统一转换成审批决定。"""
+
+    decision = approval(arguments) if callable(approval) else approval
+    if decision not in {"allow", "ask", "deny"}:
+        raise ValueError(f"无效的审批决定：{decision}")
+    return decision
+
+
+def _emit_event(on_event: EventHandler | None, event: dict) -> None:
+    """有 callback 时发送结构化审批事件。"""
+
+    if on_event is not None:
+        on_event(event)
+
+
+def _denied_result(status: Literal["policy_denied", "user_denied"], message: str) -> dict:
+    """返回没有执行 Tool 的结构化结果。"""
+
+    return {"status": status, "message": message}
+
+
+def execute_tool(
+    name: str,
+    arguments: str,
+    request_approval: ApprovalHandler | None = None,
+    on_event: EventHandler | None = None,
+) -> Any:
     """根据模型返回的工具名和 JSON 参数，验证并执行对应函数。"""
 
     # 第一步：用 call.name 从注册表找到工具。
@@ -103,7 +163,82 @@ def execute_tool(name: str, arguments: str) -> Any:
     # 第二步：Pydantic 解析并验证 call.arguments，例如：
     # '{"a": 2, "b": 3}' -> AddInput(a=2.0, b=3.0)
     validated_input = registered_tool.input_model.model_validate_json(arguments)
+    kwargs = validated_input.model_dump()
 
-    # 第三步：model_dump() 得到 kwargs 字典，再调用真正的普通函数。
+    # 审批规则只看到已经通过 Pydantic 校验的参数。
+    decision = _resolve_approval(registered_tool.approval, kwargs)
+    if decision == "deny":
+        _emit_event(
+            on_event,
+            {
+                "type": "approval_result",
+                "data": {
+                    "name": name,
+                    "arguments": kwargs,
+                    "status": "policy_denied",
+                },
+            },
+        )
+        return _denied_result("policy_denied", "工具未执行：审批规则拒绝。")
+
+    if decision == "ask":
+        _emit_event(
+            on_event,
+            {
+                "type": "approval_request",
+                "data": {"name": name, "arguments": kwargs},
+            },
+        )
+
+        if request_approval is None:
+            _emit_event(
+                on_event,
+                {
+                    "type": "approval_result",
+                    "data": {
+                        "name": name,
+                        "arguments": kwargs,
+                        "status": "policy_denied",
+                        "reason": "missing_handler",
+                    },
+                },
+            )
+            return _denied_result(
+                "policy_denied",
+                "工具未执行：缺少人工审批处理器。",
+            )
+
+        if not request_approval(name, kwargs):
+            _emit_event(
+                on_event,
+                {
+                    "type": "approval_result",
+                    "data": {
+                        "name": name,
+                        "arguments": kwargs,
+                        "status": "user_denied",
+                    },
+                },
+            )
+            return _denied_result("user_denied", "工具未执行：用户拒绝。")
+
+        approval_source = "user"
+    else:
+        approval_source = "policy"
+
+    _emit_event(
+        on_event,
+        {
+            "type": "approval_result",
+            "data": {
+                "name": name,
+                "arguments": kwargs,
+                "status": "allowed",
+                "source": approval_source,
+            },
+        },
+    )
+
+    # 最后把校验后的 kwargs 交给真正的普通函数。
     # func(**{"a": 2.0, "b": 3.0}) 等价于 func(a=2.0, b=3.0)。
-    return registered_tool.func(**validated_input.model_dump())
+    return registered_tool.func(**kwargs)
