@@ -54,13 +54,16 @@ Agent 只调用 `get_tool_schemas()` 和 `execute_tool()`，不依赖具体工�
 
 ```text
 src/orange_harness/
-├── main.py              # 配置、客户端和命令行输入
+├── main.py              # 组装组件并启动命令行循环
+├── config.py            # CLI 参数和环境配置
 ├── agent.py             # Responses API 与 ReAct 循环
+├── observer.py          # callback、控制台展示和人工确认
 ├── logger.py            # 原始事件文件日志
 ├── sandbox.py           # MacOSSandbox 和 NoSandbox
 └── tools/
     ├── __init__.py      # 递归导入工具模块，触发注册
-    ├── registry.py      # @tool、注册表和统一执行入口
+    ├── registry.py      # @tool、注册表和 Tool Schema
+    ├── executor.py      # 参数校验、审批和统一执行入口
     ├── calculator.py    # 加、减、乘、除工具
     └── shell.py         # Shell 能力和动态审批规则
 ```

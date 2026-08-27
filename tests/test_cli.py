@@ -7,7 +7,7 @@ from contextlib import chdir
 from pathlib import Path
 from unittest.mock import patch
 
-from orange_harness.main import load_config, parse_args
+from orange_harness.config import load_config, parse_args
 
 
 class CliTests(unittest.TestCase):

@@ -4,7 +4,8 @@ import unittest
 
 from pydantic import ValidationError
 
-from orange_harness.tools.registry import execute_tool, tool
+from orange_harness.tools.executor import execute_tool
+from orange_harness.tools.registry import tool
 from orange_harness.tools.shell import _shell_approval
 
 

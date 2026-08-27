@@ -3,7 +3,8 @@
 from importlib import import_module
 from pkgutil import walk_packages
 
-from .registry import TOOL_REGISTRY, execute_tool, get_tool_schemas, tool
+from .executor import execute_tool
+from .registry import TOOL_REGISTRY, get_tool_schemas, tool
 
 
 def _load_tools():
@@ -14,8 +15,8 @@ def _load_tools():
     for module in walk_packages(__path__, prefix):
         relative_name = module.name.removeprefix(prefix)
 
-        # registry.py 是框架本身；下划线开头的模块视为内部实现。
-        if relative_name == "registry":
+        # registry.py 和 executor.py 是框架本身；下划线开头的模块视为内部实现。
+        if relative_name in {"executor", "registry"}:
             continue
         if any(part.startswith("_") for part in relative_name.split(".")):
             continue
