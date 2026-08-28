@@ -28,6 +28,7 @@ _load_tools()
 
 # 保留现有工具的包级公开导入；工具注册本身已经由 _load_tools() 完成。
 from .calculator import calculate
+from .filesystem import find_files, list_dir, read_file, search_text
 from .shell import shell
 
 
@@ -35,7 +36,11 @@ __all__ = [
     "TOOL_REGISTRY",
     "calculate",
     "execute_tool",
+    "find_files",
     "get_tool_schemas",
+    "list_dir",
+    "read_file",
+    "search_text",
     "shell",
     "tool",
 ]
